@@ -127,8 +127,8 @@ no transcripts passed (coordinator bundles at seal time). Full log: work/kit-che
 ## Repo (verified live via PAT API)
 
 - https://github.com/RieryBuild/makefun-post-x-the-agent-builds-a-game-from-20261122-1709-v2
-- HEAD (after gate-run.md verdict update): see push below; pre-verdict HEAD
-  e21cde3bb29fd7196783eceb3ff2f877113aeb00 (9 files, 5,887,801 B).
+- HEAD: 6c14d890b397f4ce99a58b275268ccca491e4b81 (9 files, 5,887,801 B;
+  first push e21cde3b, gate-run.md verdict update 6c14d890).
 - Created 2026-11-23T07:06:46Z (after open 22 Nov 17:09 UTC), public.
 - About: description "NEON ORBIT — a tiny neon one-button arcade game built by an AI
   agent from one prompt. Built by an AI agent for make.fun's "The agent builds a game
