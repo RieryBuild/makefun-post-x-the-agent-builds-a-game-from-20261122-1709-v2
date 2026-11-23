@@ -99,11 +99,45 @@ Build a tiny neon one-button arcade game in one HTML file: a glowing ship orbits
   driver then finished POSTED. No other job's Chrome touched.
 - [x] X post live (video native), URL + rest_id recorded (see below)
 - [x] Repo created via PAT (RieryBuild), POST.json live, About + badges verified (see below)
-- [ ] Local kit check run (verdict pasted below)
+- [x] Local kit check run (verdict pasted below)
 
 ## Kit check verdict
 
-(pending)
+Local HEAD e21cde3bb29fd7196783eceb3ff2f877113aeb00 (GitHub, 9 files, 5,887,801 B);
+checked as local commit aaa555ad (same 9 files, byte-identical copy in work/repo-check),
+no transcripts passed (coordinator bundles at seal time). Full log: work/kit-check-r2.log.
+
+4 passed, 1 failed, 15 skipped, 5 checked at submission.
+- competition_open PASS (now between open 22 Nov 17:09 UTC and deadline 24 Nov 17:09 UTC).
+- snapshot PASS: 9 files, 5,887,801 bytes — within intake caps (each file ≤100 MiB,
+  repo ≤512 MiB). The 5.85 MB video.mp4 does NOT trip entry_size.
+- license_osi PASS: LICENSE declares SPDX-License-Identifier: MIT, OSI-approved.
+- entrypoint PASS: main.ts selects node22, accepted.
+- transcripts_present FAIL (expected, seal-time fix): no transcripts were uploaded —
+  the builder was given no --transcripts because the coordinator bundles at seal time
+  (record refused with HTTP 400 for this competition; transcripts come from the Muse
+  session files via bundle --muse-usage). All other transcript checks SKIP on no session.
+- At-submission items (verified live via PAT API, not by check): repo public; owner.json
+  wallet 6do8; created 2026-11-23T07:06:46Z (after open); GitHub HEAD e21cde3b on main;
+  3 README badges return 200 SVG; POST.json read-back matches the live post.
+- Kit note (ignored per brief, class (a)): level-36 kit vs site level 38 — fresh-kit
+  download NOT attempted (security notice in CLI help output; brief fallback = use the
+  proven level-36 kit).
+
+## Repo (verified live via PAT API)
+
+- https://github.com/RieryBuild/makefun-post-x-the-agent-builds-a-game-from-20261122-1709-v2
+- HEAD (after gate-run.md verdict update): see push below; pre-verdict HEAD
+  e21cde3bb29fd7196783eceb3ff2f877113aeb00 (9 files, 5,887,801 B).
+- Created 2026-11-23T07:06:46Z (after open 22 Nov 17:09 UTC), public.
+- About: description "NEON ORBIT — a tiny neon one-button arcade game built by an AI
+  agent from one prompt. Built by an AI agent for make.fun's "The agent builds a game
+  from one prompt" bounty, $20 in USDC."; homepage
+  https://make.fun/bounty/post-x-the-agent-builds-a-game-from-20261122-1709; topics
+  makefun, ai-agents, bounties, growth (all verified 200 via PAT).
+- README 3 badges: all 200 image/svg+xml.
+- main.ts runs locally exit 0, deterministic (two runs byte-identical), prints
+  "NEON ORBIT entry handed in: https://x.com/Rieryoff/status/2124760029152817236 (59 bytes)".
 
 ## Post (verified live via FxTwitter, the house's own read method)
 
