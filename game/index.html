@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NEON ORBIT — one prompt, one game</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #07030d; height: 100%; overflow: hidden; }
+  #wrap { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; background: #07030d; touch-action: none; }
+  #hint { position: fixed; bottom: 14px; left: 0; right: 0; text-align: center;
+    color: #7df9ff; font: 600 15px/1.4 monospace; opacity: .75; pointer-events: none; }
+</style>
+</head>
+<body>
+<div id="wrap"><canvas id="game" width="1080" height="1920"></canvas></div>
+<div id="hint">SPACE / CLICK — flip orbit &nbsp;·&nbsp; ENTER — start</div>
+<script>
+'use strict';
+/* NEON ORBIT — built from ONE prompt:
+   "Build a tiny neon one-button arcade game in one HTML file: a glowing ship
+   orbits a neon sun — press Space or click to flip orbit direction — collect
+   20 stars that appear on the orbit ring to win, dodge asteroids crossing the
+   ring, 3 lives, speed rises as you score, with a title screen, a win screen
+   at 20 stars, a lose screen at 0 lives, one neon magenta-and-cyan palette on
+   near-black, and a simple HUD showing stars, lives and score." */
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+const W = 1080, H = 1920;
+const CX = W / 2, CY = 880;          // sun centre
+const RING = 430;                    // orbit radius
+const SUN_R = 150;
+const WIN_STARS = 20;
+
+const G = {
+  state: 'title',        // title | playing | win | lose
+  angle: -Math.PI / 2,   // ship angle on the ring
+  dir: 1,                // orbit direction (+1 / -1)
+  speed: 1.15,           // rad/s, rises with stars
+  stars: 0,              // stars collected
+  lives: 3,
+  score: 0,
+  star: null,            // current star {angle}
+  rocks: [],             // asteroids {x,y,vx,vy,r}
+  spawnT: 0,             // asteroid spawn timer
+  starT: 0,              // star respawn timer
+  flash: 0,              // hit flash timer
+  t: 0,
+};
+window.__game = G; // exposed for the in-session play-test only
+
+function rand(a, b) { return a + Math.random() * (b - a); }
+function dist2(ax, ay, bx, by) { const dx = ax - bx, dy = ay - by; return dx * dx + dy * dy; }
+
+function spawnStar() {
+  // A new star appears on the ring, at least 0.6 rad away from the ship.
+  let a;
+  do { a = rand(0, Math.PI * 2); } while (Math.abs(angDiff(a, G.angle)) < 0.6);
+  G.star = { angle: a, pulse: 0 };
+}
+function angDiff(a, b) {
+  let d = a - b;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+function spawnRock() {
+  // An asteroid enters from a random edge and flies straight across the play field.
+  const edge = Math.floor(rand(0, 4));
+  let x, y;
+  if (edge === 0) { x = rand(0, W); y = -40; }
+  else if (edge === 1) { x = W + 40; y = rand(0, H); }
+  else if (edge === 2) { x = rand(0, W); y = H + 40; }
+  else { x = -40; y = rand(0, H); }
+  const tx = CX + rand(-260, 260), ty = CY + rand(-260, 260);
+  const sp = rand(240, 380) + G.stars * 6;
+  const d = Math.hypot(tx - x, ty - y);
+  G.rocks.push({ x, y, vx: (tx - x) / d * sp, vy: (ty - y) / d * sp, r: rand(22, 42), rot: rand(0, 6.28), vr: rand(-1.5, 1.5) });
+}
+function shipPos() {
+  return { x: CX + Math.cos(G.angle) * RING, y: CY + Math.sin(G.angle) * RING };
+}
+function flip() {
+  if (G.state === 'playing') G.dir *= -1;
+}
+function start() {
+  G.state = 'playing'; G.angle = -Math.PI / 2; G.dir = 1;
+  G.speed = 1.15; G.stars = 0; G.lives = 3; G.score = 0;
+  G.rocks = []; G.spawnT = 1.2; G.starT = 0; G.flash = 0;
+  spawnStar();
+}
+function loseLife() {
+  G.lives -= 1; G.flash = 0.45; G.rocks = [];
+  if (G.lives <= 0) { G.state = 'lose'; }
+}
+function update(dt) {
+  G.t += dt;
+  if (G.state !== 'playing') return;
+  if (G.flash > 0) G.flash -= dt;
+  G.speed = 1.15 + G.stars * 0.045;
+  G.angle += G.dir * G.speed * dt;
+  // Star pickup: ship passes within 0.22 rad of the star.
+  if (G.star && Math.abs(angDiff(G.star.angle, G.angle)) < 0.22) {
+    G.stars += 1; G.score += 100;
+    G.star = null; G.starT = 0.55;
+    if (G.stars >= WIN_STARS) { G.state = 'win'; return; }
+  }
+  if (!G.star) { G.starT -= dt; if (G.starT <= 0) spawnStar(); }
+  // Asteroids.
+  G.spawnT -= dt;
+  if (G.spawnT <= 0) { spawnRock(); G.spawnT = Math.max(0.55, rand(1.5, 2.4) - G.stars * 0.05); }
+  const s = shipPos();
+  for (let i = G.rocks.length - 1; i >= 0; i--) {
+    const r = G.rocks[i];
+    r.x += r.vx * dt; r.y += r.vy * dt; r.rot += r.vr * dt;
+    if (r.x < -90 || r.x > W + 90 || r.y < -90 || r.y > H + 90) { G.rocks.splice(i, 1); continue; }
+    if (dist2(r.x, r.y, s.x, s.y) < (r.r + 26) * (r.r + 26)) {
+      G.rocks.splice(i, 1);
+      loseLife();
+      if (G.state !== 'playing') return;
+    }
+  }
+}
+function glow(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; }
+function drawStarShape(x, y, r, rot) {
+  ctx.beginPath();
+  for (let i = 0; i < 10; i++) {
+    const rr = i % 2 === 0 ? r : r * 0.45;
+    const a = rot + i * Math.PI / 5;
+    ctx[i === 0 ? 'moveTo' : 'lineTo'](x + Math.cos(a) * rr, y + Math.sin(a) * rr);
+  }
+  ctx.closePath();
+}
+function draw() {
+  ctx.clearRect(0, 0, W, H);
+  ctx.fillStyle = '#07030d'; ctx.fillRect(0, 0, W, H);
+  // faint background stars
+  ctx.fillStyle = 'rgba(125,249,255,0.35)';
+  for (let i = 0; i < 40; i++) {
+    const x = (i * 271) % W, y = (i * 613) % H;
+    ctx.fillRect(x, y, 3, 3);
+  }
+  // orbit ring
+  ctx.beginPath(); ctx.arc(CX, CY, RING, 0, Math.PI * 2);
+  ctx.strokeStyle = 'rgba(255,45,149,0.35)'; ctx.lineWidth = 4; ctx.stroke();
+  // sun
+  const g = ctx.createRadialGradient(CX, CY, 10, CX, CY, SUN_R + 60);
+  g.addColorStop(0, '#ffe14d'); g.addColorStop(0.55, '#ff9d00'); g.addColorStop(1, 'rgba(255,45,149,0)');
+  ctx.fillStyle = g; ctx.beginPath(); ctx.arc(CX, CY, SUN_R + 60, 0, Math.PI * 2); ctx.fill();
+  glow('#ff9d00', 40);
+  ctx.fillStyle = '#ffd23e'; ctx.beginPath(); ctx.arc(CX, CY, SUN_R, 0, Math.PI * 2); ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#ff2d95'; ctx.font = '700 44px monospace'; ctx.textAlign = 'center';
+  ctx.fillText('NEON ORBIT', CX, CY - 8);
+  ctx.font = '600 26px monospace'; ctx.fillStyle = '#b3125e';
+  ctx.fillText('ONE PROMPT · ONE GAME', CX, CY + 34);
+  // star pickup
+  if (G.star && G.state === 'playing') {
+    const sx = CX + Math.cos(G.star.angle) * RING, sy = CY + Math.sin(G.star.angle) * RING;
+    const pr = 30 + Math.sin(G.t * 6) * 5;
+    glow('#7df9ff', 30);
+    ctx.fillStyle = '#7df9ff';
+    drawStarShape(sx, sy, pr, G.t * 1.2); ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+  // asteroids
+  for (const r of G.rocks) {
+    ctx.save(); ctx.translate(r.x, r.y); ctx.rotate(r.rot);
+    glow('#ff2d95', 18);
+    ctx.fillStyle = '#3a0a24'; ctx.strokeStyle = '#ff2d95'; ctx.lineWidth = 4;
+    ctx.beginPath();
+    for (let i = 0; i < 7; i++) {
+      const a = i / 7 * Math.PI * 2;
+      const rr = r.r * (0.8 + 0.25 * Math.sin(i * 2.7));
+      ctx[i === 0 ? 'moveTo' : 'lineTo'](Math.cos(a) * rr, Math.sin(a) * rr);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+  }
+  ctx.shadowBlur = 0;
+  // ship (only while playing / on end screens keep last position visible)
+  if (G.state !== 'title') {
+    const s = shipPos();
+    const heading = G.angle + (G.dir > 0 ? Math.PI / 2 : -Math.PI / 2);
+    ctx.save(); ctx.translate(s.x, s.y); ctx.rotate(heading);
+    glow('#00e5ff', 26);
+    ctx.fillStyle = '#00e5ff';
+    ctx.beginPath();
+    ctx.moveTo(34, 0); ctx.lineTo(-24, -22); ctx.lineTo(-12, 0); ctx.lineTo(-24, 22);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ff2d95';
+    ctx.beginPath(); ctx.arc(2, 0, 8, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+    ctx.shadowBlur = 0;
+  }
+  // HUD — icon first
+  ctx.textAlign = 'left';
+  ctx.font = '700 52px monospace';
+  ctx.fillStyle = '#7df9ff';
+  ctx.fillText('★ ' + G.stars + '/' + WIN_STARS, 48, 92);
+  ctx.fillStyle = '#ff2d95';
+  ctx.fillText('♥'.repeat(Math.max(0, G.lives)) + '♡'.repeat(Math.max(0, 3 - G.lives)), 48, 162);
+  ctx.textAlign = 'right';
+  ctx.fillStyle = '#ffe14d';
+  ctx.fillText('SCORE ' + G.score, W - 48, 92);
+  ctx.font = '600 30px monospace'; ctx.fillStyle = 'rgba(125,249,255,0.7)';
+  ctx.fillText('SPACE / TAP = FLIP', W - 48, 162);
+  if (G.flash > 0) { ctx.fillStyle = 'rgba(255,45,149,' + (G.flash * 0.5) + ')'; ctx.fillRect(0, 0, W, H); }
+  // screens
+  if (G.state === 'title') {
+    ctx.fillStyle = 'rgba(7,3,13,0.72)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    glow('#ff2d95', 34);
+    ctx.fillStyle = '#ff2d95'; ctx.font = '700 120px monospace';
+    ctx.fillText('NEON', CX, 560);
+    ctx.fillStyle = '#7df9ff';
+    ctx.fillText('ORBIT', CX, 690);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffe14d'; ctx.font = '600 40px monospace';
+    ctx.fillText('ONE PROMPT → ONE GAME', CX, 800);
+    ctx.fillStyle = '#ffffff'; ctx.font = '600 36px monospace';
+    ctx.fillText('Flip the orbit. Grab 20 ★. Dodge the rocks.', CX, 1180);
+    ctx.fillText('3 lives. Speed rises as you score.', CX, 1240);
+    ctx.fillStyle = '#7df9ff'; ctx.font = '700 44px monospace';
+    ctx.fillText('PRESS ENTER OR TAP TO START', CX, 1400);
+    ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '600 28px monospace';
+    ctx.fillText('SPACE / CLICK flips direction', CX, 1470);
+  }
+  if (G.state === 'win') {
+    ctx.fillStyle = 'rgba(7,3,13,0.72)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    glow('#7df9ff', 34);
+    ctx.fillStyle = '#7df9ff'; ctx.font = '700 110px monospace';
+    ctx.fillText('YOU WIN!', CX, 760);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffe14d'; ctx.font = '600 44px monospace';
+    ctx.fillText('20 ★ collected — orbit complete', CX, 880);
+    ctx.fillStyle = '#ffffff'; ctx.font = '600 40px monospace';
+    ctx.fillText('SCORE ' + G.score + '  ·  ' + G.lives + ' ♥ left', CX, 980);
+    ctx.fillStyle = '#ff2d95'; ctx.font = '700 40px monospace';
+    ctx.fillText('PRESS ENTER TO PLAY AGAIN', CX, 1120);
+  }
+  if (G.state === 'lose') {
+    ctx.fillStyle = 'rgba(7,3,13,0.72)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    glow('#ff2d95', 34);
+    ctx.fillStyle = '#ff2d95'; ctx.font = '700 110px monospace';
+    ctx.fillText('GAME OVER', CX, 760);
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#ffffff'; ctx.font = '600 44px monospace';
+    ctx.fillText('★ ' + G.stars + ' / ' + WIN_STARS + '   ·   SCORE ' + G.score, CX, 880);
+    ctx.fillStyle = '#7df9ff'; ctx.font = '700 40px monospace';
+    ctx.fillText('PRESS ENTER TO RETRY', CX, 1000);
+  }
+}
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  update(dt);
+  draw();
+  requestAnimationFrame(loop);
+}
+function key(e) {
+  if (e.code === 'Space' || e.code === 'ArrowUp') { e.preventDefault(); flip(); }
+  if (e.code === 'Enter') {
+    if (G.state !== 'playing') start();
+  }
+  if (e.code === 'KeyR' && G.state !== 'playing') start();
+}
+window.addEventListener('keydown', key);
+cv.addEventListener('pointerdown', () => {
+  if (G.state !== 'playing') start(); else flip();
+});
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
